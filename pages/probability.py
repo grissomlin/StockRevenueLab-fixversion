@@ -610,6 +610,7 @@ else:
     4. 放寬增長範圍
     """)
 
+
 # ========== 8. 頁尾資訊 ==========
 st.markdown("---")
 footer_col1, footer_col2, footer_col3 = st.columns(3)
@@ -619,3 +620,45 @@ with footer_col2:
     st.markdown(f"**數據週期**：2019-2025")
 with footer_col3:
     st.markdown(f"**計算方式**：{price_label}漲幅")
+
+# ========== 9. 快速資源連結 ==========
+st.divider()
+st.markdown("### 🔗 快速資源連結")
+
+# 使用 markdown 創建您想要的格式
+st.markdown("""
+<div style="text-align: center;">
+    <table style="margin: 0 auto; border-collapse: separate; border-spacing: 30px 0;">
+        <tr>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">🛠️</div>
+                <a href="https://vocus.cc/article/694f6534fd89780001f9c6ad" target="_blank" style="text-decoration: none;">
+                    <b>⚙️ 環境與 AI 設定教學</b>
+                </a>
+            </td>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">📊</div>
+                <a href="https://vocus.cc/salon/grissomlin/room/694f650d8b4c8b73c3985889" target="_blank" style="text-decoration: none;">
+                    <b>📖 儀表板功能詳解</b>
+                </a>
+            </td>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">🐙</div>
+                <a href="https://github.com/grissomlin/StockRevenueLab" target="_blank" style="text-decoration: none;">
+                    <b>💻 GitHub 專案原始碼</b>
+                </a>
+            </td>
+        </tr>
+    </table>
+</div>
+""", unsafe_allow_html=True)
+
+# 隱藏Streamlit預設元素
+hide_st_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_st_style, unsafe_allow_html=True)
