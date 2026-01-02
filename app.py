@@ -661,8 +661,15 @@ if not df.empty:
     
     # ========== 12. 深度挖掘：領頭羊與備註搜尋 ==========
     st.write("---")
+    st.write("---")
     st.subheader(f"🔍 {target_year} 深度挖掘：區間業績王與關鍵字搜尋")
-    st.info("想知道為什麼某個區間營收特別綠？直接選取該區間，並輸入關鍵字搜尋原因！")
+    st.info(f"""
+    想知道為什麼某個區間營收特別綠？直接選取該區間，並輸入關鍵字搜尋原因！
+    
+    **當前計算方式：{price_calc}**
+    - 分組區間：基於{price_label}漲幅分組
+    - 顯示數據：各股票的{price_label}年度漲幅
+    """)
 
     col_a, col_b, col_c = st.columns([1, 1, 2])
     with col_a:
