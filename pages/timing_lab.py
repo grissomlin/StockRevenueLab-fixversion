@@ -1,3 +1,4 @@
+https://github.com/grissomlin/StockRevenueLab-fixversion/blob/main/pages/timing_lab.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +19,7 @@ except ImportError:
 
 # ========== 1. 頁面配置 ==========
 st.set_page_config(
-    page_title="公告行為研究室 4.3 | StockRevenueLab", 
+    page_title="公告行為研究室 4.4 | StockRevenueLab", 
     layout="wide",
     page_icon="📊"
 )
@@ -200,12 +201,14 @@ def detect_outliers(df, col, threshold=1.5):
     outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
     return outliers
 
-# ========== 4. 核心 SQL 邏輯 (初次爆發) ==========
+# ========== 4. 核心 SQL 邏輯 (增強版：加入年K線最高價查詢) ==========
 @st.cache_data(ttl=3600)
 def fetch_timing_data(year, metric_col, limit, keyword):
     engine = get_engine()
     minguo_year = int(year) - 1911
-    query = f"""
+    
+    # 主要查詢（不變）
+    main_query = f"""
     WITH raw_events AS (
         SELECT stock_id, stock_name, report_month, {metric_col}, remark,
                LAG({metric_col}) OVER (PARTITION BY stock_id ORDER BY report_month) as prev_metric
@@ -232,7 +235,7 @@ def fetch_timing_data(year, metric_col, limit, keyword):
     ),
     final_detail AS (
         SELECT 
-            e.stock_id, e.stock_name, e.report_month, e.{metric_col} as growth_val, e.remark,
+            e.stock_id, e.stock_name, e.report_month, e.{metric_col} as growth_val, e.remark, e.base_date,
             AVG(CASE WHEN c.date >= e.base_date - interval '38 days' AND c.date < e.base_date - interval '9 days' THEN c.weekly_ret END) * 4 as pre_month,
             AVG(CASE WHEN c.date >= e.base_date - interval '9 days' AND c.date <= e.base_date - interval '3 days' THEN c.weekly_ret END) as pre_week,
             AVG(CASE WHEN c.date > e.base_date - interval '3 days' AND c.date <= e.base_date + interval '4 days' THEN c.weekly_ret END) as announce_week,
@@ -244,8 +247,69 @@ def fetch_timing_data(year, metric_col, limit, keyword):
     )
     SELECT * FROM final_detail WHERE pre_week IS NOT NULL ORDER BY pre_month DESC;
     """
+    
     with engine.connect() as conn:
-        return pd.read_sql_query(text(query), conn)
+        df = pd.read_sql_query(text(main_query), conn)
+    
+    # 如果沒有數據，直接返回
+    if df.empty:
+        return df
+    
+    # ========== 新增：查詢年K線最高價資訊 ==========
+    try:
+        # 提取股票代碼清單
+        stock_ids = df['stock_id'].unique()
+        
+        # 計算對應的西元年份（公告事件發生的年份）
+        df['event_year'] = df['base_date'].dt.year
+        
+        # 為每個事件查詢對應年份的年K線資料
+        annual_data = []
+        for idx, row in df.iterrows():
+            stock_id = row['stock_id']
+            event_year = row['event_year']
+            
+            # 查詢該股票在事件年份的年K線
+            annual_query = f"""
+            SELECT symbol, year, year_high, year_close, year_open,
+                   (year_close - year_open) / NULLIF(year_open, 0) * 100 as year_return
+            FROM stock_annual_k
+            WHERE symbol LIKE '{stock_id}.%' AND year = '{event_year}'
+            """
+            
+            annual_df = pd.read_sql_query(text(annual_query), conn)
+            if not annual_df.empty:
+                annual_data.append({
+                    'stock_id': stock_id,
+                    'report_month': row['report_month'],
+                    'year_high': annual_df.iloc[0]['year_high'],
+                    'year_close': annual_df.iloc[0]['year_close'],
+                    'year_open': annual_df.iloc[0]['year_open'],
+                    'year_return': annual_df.iloc[0]['year_return'],
+                    'event_year': event_year
+                })
+        
+        # 將年K線數據合併到主數據框
+        if annual_data:
+            annual_df = pd.DataFrame(annual_data)
+            df = pd.merge(df, annual_df, on=['stock_id', 'report_month'], how='left')
+            
+            # 計算距離年度最高價的漲幅空間（假設使用公告後一個月的收盤價）
+            # 注意：這裡是概念性計算，實際需要對應時間點的股價
+            if 'year_high' in df.columns and 'year_close' in df.columns:
+                # 計算年度最高價相對於年度收盤價的溢價幅度
+                df['high_premium_pct'] = ((df['year_high'] - df['year_close']) / df['year_close'] * 100).round(2)
+                
+                # 標記是否突破年度高點（概念性）
+                # 假設公告後一個月報酬 > 0 且年度最高價溢價幅度較大
+                df['potential_break_high'] = df.apply(
+                    lambda x: "是" if x['after_month'] > 5 and x['high_premium_pct'] < 15 else "否", 
+                    axis=1
+                )
+    except Exception as e:
+        st.warning(f"年K線數據查詢部分異常: {str(e)}")
+    
+    return df
 
 # ========== 5. 使用介面區 ==========
 with st.sidebar:
@@ -261,6 +325,7 @@ with st.sidebar:
     st.markdown("### 📈 統計設定")
     show_advanced = st.checkbox("顯示進階統計", value=True)
     detect_outliers_opt = st.checkbox("檢測異常值", value=False)
+    show_annual_analysis = st.checkbox("顯示年度高點分析", value=True)
     
     st.markdown("---")
     st.markdown("### ℹ️ 使用說明")
@@ -270,18 +335,24 @@ with st.sidebar:
     3. 可選關鍵字篩選
     4. 查看各階段統計分析
     5. 使用AI深度診斷
+    6. 新增：年度高點突破分析
     """)
 
 # 主標題
-st.title(f"📊 {target_year}年 公告行為研究室 4.3")
-st.caption("增強版 - 含偏度、峰度、變異係數等進階統計分析")
+st.title(f"📊 {target_year}年 公告行為研究室 4.4")
+st.caption("增強版 - 含年度高點突破分析")
+
 # 加入數據侷限性說明
 st.warning("""
-> 💡 **注意：本分析僅為概念示範（demo）** > 為簡化計算，「公告前後一個月漲跌幅」係以 **周K線資料近似估算**（取公告日前後約4週的平均週報酬推算），  
-> 並未使用日頻數據或真實月K線，亦未進行複利累積調整。  
-> 因此數值僅供「趨勢參考」，**不建議作為投資依據**。  
-> 若您希望進行嚴謹分析，請自行取得高頻行情資料並採用標準事件研究法（Event Study）流程。
+> 💡 **注意：本分析僅為概念示範（demo）**  
+> 1. 為簡化計算，「公告前後一個月漲跌幅」係以 **周K線資料近似估算**（取公告日前後約4週的平均週報酬推算），  
+>    並未使用日頻數據或真實月K線，亦未進行複利累積調整。  
+> 2. **年度高點分析**：年度最高價數據來自年K線，僅代表該年度整體波動區間，  
+>    與事件發生時點可能不完全匹配，供參考趨勢方向。  
+> 3. 因此數值僅供「趨勢參考」，**不建議作為投資依據**。  
+> 4. 若您希望進行嚴謹分析，請自行取得高頻行情資料並採用標準事件研究法（Event Study）流程。
 """)
+
 # 獲取數據
 with st.spinner("正在載入數據..."):
     df = fetch_timing_data(target_year, study_metric, threshold, search_remark)
@@ -315,6 +386,69 @@ if not df.empty:
     col5.metric("T+1周", f"{fw_mean}%", f"中位: {fw_med}%")
     col6.metric("T+1月", f"{fm_mean}%", f"中位: {fm_med}%")
     
+    # ========== 新增：年度高點分析看板 ==========
+    if 'year_high' in df.columns and show_annual_analysis:
+        st.markdown("---")
+        st.subheader("🏆 年度高點分析")
+        
+        # 計算年度高點相關統計
+        if 'year_return' in df.columns and 'high_premium_pct' in df.columns:
+            # 過濾有效數據
+            valid_annual = df[['year_return', 'high_premium_pct']].dropna()
+            
+            if not valid_annual.empty:
+                annual_stats = {
+                    'avg_year_return': valid_annual['year_return'].mean(),
+                    'median_year_return': valid_annual['year_return'].median(),
+                    'avg_high_premium': valid_annual['high_premium_pct'].mean(),
+                    'stocks_near_high': (valid_annual['high_premium_pct'] < 10).sum(),
+                    'stocks_far_from_high': (valid_annual['high_premium_pct'] > 30).sum()
+                }
+                
+                col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+                
+                with col_a1:
+                    st.metric(
+                        "平均年度漲幅", 
+                        f"{annual_stats['avg_year_return']:.1f}%",
+                        f"中位: {annual_stats['median_year_return']:.1f}%"
+                    )
+                
+                with col_a2:
+                    st.metric(
+                        "距年度高點空間", 
+                        f"{annual_stats['avg_high_premium']:.1f}%",
+                        "平均溢價幅度"
+                    )
+                
+                with col_a3:
+                    st.metric(
+                        "接近年度高點", 
+                        f"{annual_stats['stocks_near_high']}檔",
+                        f"({annual_stats['stocks_near_high']/len(valid_annual)*100:.1f}%)"
+                    )
+                
+                with col_a4:
+                    st.metric(
+                        "遠離年度高點", 
+                        f"{annual_stats['stocks_far_from_high']}檔",
+                        f"({annual_stats['stocks_far_from_high']/len(valid_annual)*100:.1f}%)"
+                    )
+                
+                # 顯示高點突破潛力股
+                if 'potential_break_high' in df.columns:
+                    breakthrough_stocks = df[df['potential_break_high'] == '是']
+                    if len(breakthrough_stocks) > 0:
+                        st.info(f"🎯 **潛在突破年度高點股**: {len(breakthrough_stocks)}檔 (佔比: {len(breakthrough_stocks)/len(df)*100:.1f}%)")
+                        
+                        # 顯示突破股清單
+                        with st.expander("查看潛在突破股清單"):
+                            display_cols = ['stock_id', 'stock_name', 'after_month', 'year_return', 'high_premium_pct', 'potential_break_high', 'remark']
+                            st.dataframe(
+                                breakthrough_stocks[display_cols].sort_values('after_month', ascending=False),
+                                use_container_width=True
+                            )
+    
     st.markdown("---")
     
     # ========== B. 原始明細清單 ==========
@@ -346,7 +480,8 @@ if not df.empty:
 分析重點：
 1. 右尾效應分析：檢查T-1月的高報酬股票特徵
 2. 資訊不對稱：比較T-1月與T-1周的報酬分佈
-3. 策略有效性：評估T+1月報酬的持續性""", language="text")
+3. 策略有效性：評估T+1月報酬的持續性
+4. 年度高點突破潛力""", language="text")
     
     # 添加連結欄位
     df['技術圖表'] = df['stock_id'].apply(lambda x: f"https://www.wantgoo.com/stock/{x}/technical-chart")
@@ -578,6 +713,97 @@ if not df.empty:
             - **IQR**: 最終報酬的分佈範圍
             """)
     
+    # ========== 新增：年度高點分析圖表 ==========
+    if 'year_high' in df.columns and show_annual_analysis:
+        st.markdown("---")
+        st.subheader("🏆 年度高點突破分析")
+        
+        # 創建兩欄布局
+        col_annual1, col_annual2 = st.columns(2)
+        
+        with col_annual1:
+            # 年度報酬分佈圖
+            if 'year_return' in df.columns:
+                annual_data = df['year_return'].dropna()
+                if not annual_data.empty:
+                    fig_annual = go.Figure()
+                    fig_annual.add_trace(go.Histogram(
+                        x=annual_data,
+                        nbinsx=20,
+                        marker_color='#ff6b6b',
+                        opacity=0.7,
+                        name='年度報酬分佈'
+                    ))
+                    
+                    # 添加平均線
+                    mean_val = annual_data.mean()
+                    fig_annual.add_vline(
+                        x=mean_val,
+                        line_color="red",
+                        line_width=2,
+                        annotation_text=f"平均 {mean_val:.1f}%",
+                        annotation_position="top right"
+                    )
+                    
+                    fig_annual.update_layout(
+                        title="📅 年度報酬分佈圖",
+                        xaxis_title="年度報酬率 (%)",
+                        yaxis_title="股票數量",
+                        height=400
+                    )
+                    st.plotly_chart(fig_annual, use_container_width=True)
+        
+        with col_annual2:
+            # 距離年度高點空間分佈
+            if 'high_premium_pct' in df.columns:
+                premium_data = df['high_premium_pct'].dropna()
+                if not premium_data.empty:
+                    fig_premium = go.Figure()
+                    
+                    # 分組：接近高點(<10%)、中等距離(10-30%)、遠離高點(>30%)
+                    bins = [-float('inf'), 10, 30, float('inf')]
+                    labels = ["接近高點(<10%)", "中等距離(10-30%)", "遠離高點(>30%)"]
+                    
+                    # 計算分組數量
+                    counts, _ = np.histogram(premium_data, bins=bins)
+                    
+                    fig_premium.add_trace(go.Bar(
+                        x=labels,
+                        y=counts,
+                        marker_color=['#32cd32', '#ffaa00', '#ff4b4b'],
+                        text=counts,
+                        textposition='auto',
+                    ))
+                    
+                    fig_premium.update_layout(
+                        title="📊 距離年度高點空間分佈",
+                        xaxis_title="距離年度高點幅度",
+                        yaxis_title="股票數量",
+                        height=400
+                    )
+                    st.plotly_chart(fig_premium, use_container_width=True)
+                    
+                    # 解讀說明
+                    st.info("""
+                    **距離年度高點空間解讀**：
+                    - **<10% (綠色)**：股價已接近年度高點，突破機會較大
+                    - **10-30% (橙色)**：中等距離，需強勁動能才能突破
+                    - **>30% (紅色)**：距離年度高點較遠，突破難度較高
+                    """)
+        
+        # 顯示詳細的年度高點數據表格
+        with st.expander("📋 查看詳細年度高點數據"):
+            if 'year_high' in df.columns and 'year_return' in df.columns and 'high_premium_pct' in df.columns:
+                display_cols = ['stock_id', 'stock_name', 'year_return', 'year_high', 'year_close', 'high_premium_pct']
+                if 'potential_break_high' in df.columns:
+                    display_cols.append('potential_break_high')
+                display_cols.append('remark')
+                
+                st.dataframe(
+                    df[display_cols].sort_values('high_premium_pct'),
+                    use_container_width=True
+                )
+    
     st.markdown("---")
     
     # ========== E. AI 診斷 (增強版) ==========
@@ -599,7 +825,7 @@ if not df.empty:
             summary_lines.append(line)
         return "\n".join(summary_lines)
     
-    # 增強版提示詞
+    # 增強版提示詞（加入年度高點分析）
     prompt_text = f"""
 # 台股營收爆發行為量化分析報告
 ## 數據概要
@@ -619,6 +845,11 @@ if not df.empty:
 【分佈摘要數據】：
 {dist_txt}
 
+【年度高點分析】：
+{f"平均年度報酬: {annual_stats.get('avg_year_return', 0):.1f}%" if 'annual_stats' in locals() else "無年度高點數據"}
+{f"平均距離年度高點空間: {annual_stats.get('avg_high_premium', 0):.1f}%" if 'annual_stats' in locals() else ""}
+{f"接近年度高點股: {annual_stats.get('stocks_near_high', 0)}檔" if 'annual_stats' in locals() else ""}
+
 ## 診斷分析問題
 請針對以上數據進行專業量化診斷：
 
@@ -630,18 +861,18 @@ if not df.empty:
    - T周偏度({advanced_stats.get('T周', {}).get('skew', 'N/A')})與峰度({advanced_stats.get('T周', {}).get('kurtosis', 'N/A')})顯示市場呈現的是「理性定價」還是「過度反應」？
    - T+1周表現(均值{fw_mean}%)相對於T周，顯示的是「追加買盤」還是「利多出盡」？
 
-3. **風險與報酬特徵**：
+3. **年度高點突破潛力**：
+   - {f"平均距離年度高點空間 {annual_stats.get('avg_high_premium', 0):.1f}%，這個數值對後續走勢有何意義？" if 'annual_stats' in locals() else "無年度高點數據"}
+   - {f"有 {annual_stats.get('stocks_near_high', 0)} 檔股票距離年度高點不到10%，這些股票是否更容易創新高？" if 'annual_stats' in locals() else ""}
+
+4. **風險與報酬特徵**：
    - 變異係數趨勢(T-1月:{advanced_stats.get('T-1月', {}).get('cv', 'N/A')}% → T+1月:{advanced_stats.get('T+1月', {}).get('cv', 'N/A')}%)反映什麼風險變化？
    - 峰度值變化如何影響「極端報酬」的發生機率？
 
-4. **投資策略建議**：
+5. **投資策略建議**：
    - 針對這組數據特徵，給予投資人最具期望值的「進場點」與「出場點」建議
    - 應設定怎樣的停利停損位置？(參考IQR:{advanced_stats.get('T周', {}).get('iqr', 'N/A')}%)
-   - 如何利用「偏度差值」({advanced_stats.get('T-1月', {}).get('mean_median_diff', 'N/A')}%)來篩選股票？
-
-5. **年度比較洞察**：
-   - 與過往年度相比，{target_year}年的營收公告效應呈現什麼特殊現象？
-   - 從「上漲機率」趨勢(T-1月:{advanced_stats.get('T-1月', {}).get('win_rate', 'N/A')}% → T+1月:{advanced_stats.get('T+1月', {}).get('win_rate', 'N/A')}%)看策略有效性
+   - 如何結合「距離年度高點空間」來篩選更有潛力的股票？
 """
     
     # 顯示提示詞
@@ -739,7 +970,7 @@ else:
 st.markdown("---")
 footer_col1, footer_col2, footer_col3 = st.columns(3)
 with footer_col1:
-    st.markdown("**版本**：公告行為研究室 4.3")
+    st.markdown("**版本**：公告行為研究室 4.4")
 with footer_col2:
     st.markdown("**數據週期**：2020-2025")
 with footer_col3:
