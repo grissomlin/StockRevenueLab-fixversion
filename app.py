@@ -677,35 +677,38 @@ if not df.empty:
     # 修改後的 detail_query 區塊
     detail_query = f"""
     WITH target_stocks AS (
-        SELECT symbol, ((year_close - year_open) / year_open) * 100 as annual_ret,
-        CASE 
-            -- 務必確保這裡的字串與 fetch_heatmap_data 裡定義的一模一樣
-            WHEN ((year_close - year_open) / year_open) * 100 <= -100 THEN '00. 下跌-100%以下'
-            WHEN ((year_close - year_open) / year_open) * 100 < -90 THEN '01. 下跌-100%至-90%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -80 THEN '02. 下跌-90%至-80%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -70 THEN '03. 下跌-80%至-70%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -60 THEN '04. 下跌-70%至-60%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -50 THEN '05. 下跌-60%至-50%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -40 THEN '06. 下跌-50%至-40%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -30 THEN '07. 下跌-40%至-30%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -20 THEN '08. 下跌-30%至-20%'
-            WHEN ((year_close - year_open) / year_open) * 100 < -10 THEN '09. 下跌-20%至-10%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 0 THEN '10. 下跌-10%至0%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 100 THEN '11. 上漲0-100%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 200 THEN '12. 上漲100-200%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 300 THEN '13. 上漲200-300%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 400 THEN '14. 上漲300-400%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 500 THEN '15. 上漲400-500%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 600 THEN '16. 上漲500-600%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 700 THEN '17. 上漲600-700%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 800 THEN '18. 上漲700-800%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 900 THEN '19. 上漲800-900%'
-            WHEN ((year_close - year_open) / year_open) * 100 < 1000 THEN '20. 上漲900-1000%'
-            ELSE '21. 上漲1000%以上'
-        END AS return_bin
+        SELECT symbol, 
+            -- 使用 price_field 計算漲幅（與熱力圖一致）
+            (({price_field} - year_open) / year_open) * 100 as annual_ret,
+            CASE 
+                -- 使用 price_field 計算分類（與熱力圖一致）
+                WHEN (({price_field} - year_open) / year_open) * 100 <= -100 THEN '00. 下跌-100%以下'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -90 THEN '01. 下跌-100%至-90%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -80 THEN '02. 下跌-90%至-80%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -70 THEN '03. 下跌-80%至-70%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -60 THEN '04. 下跌-70%至-60%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -50 THEN '05. 下跌-60%至-50%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -40 THEN '06. 下跌-50%至-40%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -30 THEN '07. 下跌-40%至-30%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -20 THEN '08. 下跌-30%至-20%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < -10 THEN '09. 下跌-20%至-10%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 0 THEN '10. 下跌-10%至0%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 100 THEN '11. 上漲0-100%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 200 THEN '12. 上漲100-200%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 300 THEN '13. 上漲200-300%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 400 THEN '14. 上漲300-400%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 500 THEN '15. 上漲400-500%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 600 THEN '16. 上漲500-600%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 700 THEN '17. 上漲600-700%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 800 THEN '18. 上漲700-800%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 900 THEN '19. 上漲800-900%'
+                WHEN (({price_field} - year_open) / year_open) * 100 < 1000 THEN '20. 上漲900-1000%'
+                ELSE '21. 上漲1000%以上'
+            END AS return_bin
         FROM stock_annual_k 
         WHERE year = '{target_year}'
     ),
+
     latest_remarks AS (
         SELECT DISTINCT ON (stock_id) stock_id, remark 
         FROM monthly_revenue 
