@@ -854,6 +854,7 @@ if not df.empty:
 else:
     st.warning(f"⚠️ 找不到 {target_year} 年的數據。請確認資料庫中已匯入該年度股價與營收。")
 
+
 # ========== 14. 頁尾 (修正後) ==========
 st.markdown("---")
 
@@ -863,7 +864,6 @@ current_year_month = current_date.strftime("%Y-%m")
 
 # 網站統計資訊
 col2, col3 = st.columns(2)
-
 
 with col2:
     # 只在有數據的情況下計算完整性
@@ -890,6 +890,38 @@ with col3:
         <div style="font-size: 10px; color: #999;">即時更新</div>
     </div>
     """, unsafe_allow_html=True)
+
+# 快速資源連結
+st.markdown("---")
+st.markdown("### 🔗 快速資源連結")
+
+# 使用 markdown 創建您想要的格式
+st.markdown("""
+<div style="text-align: center;">
+    <table style="margin: 0 auto; border-collapse: separate; border-spacing: 30px 0;">
+        <tr>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">🛠️</div>
+                <a href="https://vocus.cc/article/694f6534fd89780001f9c6ad" target="_blank" style="text-decoration: none;">
+                    <b>⚙️ 環境與 AI 設定教學</b>
+                </a>
+            </td>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">📊</div>
+                <a href="https://vocus.cc/salon/grissomlin/room/694f650d8b4c8b73c3985889" target="_blank" style="text-decoration: none;">
+                    <b>📖 儀表板功能詳解</b>
+                </a>
+            </td>
+            <td style="text-align: center; vertical-align: top;">
+                <div style="font-size: 1.5em;">🐙</div>
+                <a href="https://github.com/grissomlin/StockRevenueLab" target="_blank" style="text-decoration: none;">
+                    <b>💻 GitHub 專案原始碼</b>
+                </a>
+            </td>
+        </tr>
+    </table>
+</div>
+""", unsafe_allow_html=True)
 
 st.caption(f"""
 Developed by StockRevenueLab | 讓 16 萬筆數據說真話 | 統計模式 v2.0 | AI分析功能已上線 | 更新時間: {current_date.strftime('%Y-%m-%d %H:%M:%S')}
