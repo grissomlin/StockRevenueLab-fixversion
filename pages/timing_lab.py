@@ -1,4 +1,4 @@
-https://github.com/grissomlin/StockRevenueLab-fixversion/blob/main/pages/timing_lab.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
