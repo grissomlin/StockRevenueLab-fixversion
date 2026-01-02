@@ -807,6 +807,51 @@ with footer_col2:
 with footer_col3:
     st.markdown(f"**計算方式**：{price_calc}")
 
+# ========== 7. 快速資源連結 ==========
+st.divider()
+st.markdown("### 🔗 快速資源連結")
+col_link1, col_link2, col_link3 = st.columns(3)
+
+with col_link1:
+    st.markdown("🛠️")
+    st.page_link(
+        "https://vocus.cc/article/694f6534fd89780001f9c6ad", 
+        label="環境與 AI 設定教學", 
+        icon="⚙️"
+    )
+
+with col_link2:
+    st.markdown("📊")
+    st.page_link(
+        "https://vocus.cc/salon/grissomlin/room/694f650d8b4c8b73c3985889", 
+        label="儀表板功能詳解", 
+        icon="📖"
+    )
+
+with col_link3:
+    st.markdown("🐙")
+    st.page_link(
+        "https://github.com/grissomlin/StockRevenueLab", 
+        label="GitHub 專案原始碼", 
+        icon="💻"
+    )
+
+# 隱藏Streamlit預設元素
+hide_st_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
+# 初始化session state變數
+if 'run_ai_diagnosis' not in st.session_state:
+    st.session_state.run_ai_diagnosis = False
+if 'show_stats' not in st.session_state:
+    st.session_state.show_stats = False
+
 # 隱藏Streamlit預設元素
 hide_st_style = """
 <style>
